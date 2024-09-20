@@ -5,12 +5,21 @@ import {TokenRouter} from "./libs/TokenRouter.sol";
 import {TokenMessage} from "./libs/TokenMessage.sol";
 import {Address} from "@openzeppelin/contracts/utils/Address.sol";
 
+// TODO: Integrate Chainlink Price Feeds to ensure user claims an equivalent amount of native tokens on the destination chain.
+// TODO: Track the amount of funds that can be currently bridged, given the amount in the Insuarance Fund and the amount awaiting finality.
+// TODO: Take bridging fees to fund the Insurance Fund & reward users who provide liquidity for bridging.
+
 /**
  * @title Hyperlane Native Token Router that extends ERC20 with remote transfer functionality.
  * @author Abacus Works
  * @dev Supply on each chain is not constant but the aggregate supply across all chains is.
+ * @dev This is an edited version of HypNative, allowing for:
+ * - Bridging of native tokens across chains (i.e. deposit ETH on Ethereum and receive RBTC on Rootstock)
+ * - Instant transfer of bridged assets, ignoring finality as long as the currently bridged amount does not exceed the insurance fund.
+ * - Depositing of liquidity which is utilized by the contract for handling withdrawals and earns bridging fees.
  */
 contract HypNative is TokenRouter {
+
     /**
      * @dev Emitted when native tokens are donated to the contract.
      * @param sender The address of the sender.
@@ -75,6 +84,8 @@ contract HypNative is TokenRouter {
         bytes calldata // no metadata
     ) internal virtual override {
         Address.sendValue(payable(_recipient), _amount);
+
+        
     }
 
     receive() external payable {
