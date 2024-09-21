@@ -1,0 +1,3 @@
+[submodule "lib/hyperspeed-bridge-fork"]
+	path = lib/hyperspeed-bridge-fork
+	url = https://github.com/Tranquil-Flow/hyperspeed-bridge-fork
