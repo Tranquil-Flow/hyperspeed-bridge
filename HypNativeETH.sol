@@ -6,7 +6,6 @@ import {TokenMessage} from "./libs/TokenMessage.sol";
 import {Address} from "@openzeppelin/contracts/utils/Address.sol";
 import {AggregatorV3Interface} from "@chainlink/contracts/src/v0.8/shared/interfaces/AggregatorV3Interface.sol";
 
-// TODO: Track the amount of funds that can be currently bridged, given the amount in the Insuarance Fund and the amount awaiting finality.
 // TODO: Take bridging fees to fund the Insurance Fund & reward users who provide liquidity for bridging.
 
 /**

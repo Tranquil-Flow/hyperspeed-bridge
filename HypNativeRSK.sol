@@ -6,14 +6,25 @@ import {TokenMessage} from "./libs/TokenMessage.sol";
 import {Address} from "@openzeppelin/contracts/utils/Address.sol";
 
 interface IUmbrellaFeeds {
-    /// @notice method will revert if data for `_key` not exists.
-    /// @param _key hash of feed name
-    /// @return price
-    function getPrice(bytes32 _key) external view returns (uint128 price);
+    struct PriceData {
+        /// @dev this is placeholder, that can be used for some additional data
+        /// atm of creating this smart contract, it is only used as marker for removed data (when == type(uint8).max)
+        uint8 data;
+        /// @dev heartbeat: how often price data will be refreshed in case price stay flat
+        uint24 heartbeat;
+        /// @dev timestamp: price time, at this time validators run consensus
+        uint32 timestamp;
+        /// @dev price
+        uint128 price;
+    }
+
+    /// @dev This method should be used only for Layer2 as it is more gas consuming than others views.
+    /// @notice It does not revert on empty data.
+    /// @param _name string feed name
+    /// @return data PriceData
+    function getPriceDataByName(string calldata _name) external view returns (PriceData memory data);
 }
 
-// TODO: Determine the UmbrellaFeeds key for WRBTC-rUSDT & RBTC-USD (Fix getUmbrellaPriceFeedLatestAnswer)
-// TODO: Track the amount of funds that can be currently bridged, given the amount in the Insuarance Fund and the amount awaiting finality.
 // TODO: Take bridging fees to fund the Insurance Fund & reward users who provide liquidity for bridging.
 
 
@@ -143,11 +154,11 @@ contract HypNative is TokenRouter {
      * @return price The latest RBTC/USD price with 8 decimals
      */
     function getUmbrellaPriceFeedLatestAnswer() public view returns (uint128) {
-        // Rootstock Mainnet WRBTC-rUSDT key: 0x0000000000000000000000000000000000000000000000000000000000000000
-        // Rootstock Testnet RBTC-USD key: 0x0000000000000000000000000000000000000000000000000000000000000000
-        uint128 answer = umbrellaFeeds.getPrice(0x0000000000000000000000000000000000000000000000000000000000000000);
-        require(answer > 0, "Invalid RBTC/USD price");
-        return answer;
+        // Rootstock Mainnet: WRBTC-rUSDT
+        // Rootstock Testnet: RBTC-USD
+        (,,, uint128 price) = umbrellaFeeds.getPriceDataByName("RBTC-USD");
+        require(price > 0, "Invalid RBTC/USD price");
+        return price;
     }
 
     function getInsuranceFundAmount() public view returns (uint256) {
