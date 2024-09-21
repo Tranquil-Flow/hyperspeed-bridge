@@ -29,6 +29,8 @@ interface IUmbrellaFeeds {
 contract HypNative is TokenRouter {
     IUmbrellaFeeds public umbrellaFeeds;
 
+    uint256 public ethereumInsuranceFundAmount; // Stores the amount of USD value in the Insurance Fund on Ethereum
+
     /**
      * @dev Emitted when native tokens are donated to the contract.
      * @param sender The address of the sender.
@@ -126,6 +128,62 @@ contract HypNative is TokenRouter {
         return answer;
     }
 
+    function getInsuranceFundAmount() public view returns (uint256) {
+        // Determine the amount of RBTC in the Insurance Fund
+        uint256 insuranceFundRbtcAmount = address(insuranceFund).balance;
+        
+        // Get the latest RBTC/USD price from Umbrella Network
+        uint128 rbtcUsdPrice = getUmbrellaPriceFeedLatestAnswer();
+
+        // Determine the amount of USD value in the Insurance Fund
+        uint256 insuranceFundUsdAmount = (insuranceFundRbtcAmount * uint256(rbtcUsdPrice)) / 1e18;
+        return insuranceFundUsdAmount;
+    }
+
+
+    /// @dev Hyperspeed Bridge: Edited to send the current amount of funds in the Insurance Fund in the message.
+    function _transferRemote(
+        uint32 _destination,
+        bytes32 _recipient,
+        uint256 _amountOrId,
+        uint256 _value,
+        bytes memory _hookMetadata,
+        address _hook
+    ) internal virtual override returns (bytes32 messageId) {
+        uint256 _insuranceFundAmount = getInsuranceFundAmount();
+        bytes memory _tokenMetadata = _transferFromSender(_amountOrId);
+        bytes memory _tokenMessage = TokenMessage.format(
+            _recipient,
+            _amountOrId,
+            _tokenMetadata,
+            _insuranceFundAmount
+        );
+
+        messageId = _Router_dispatch(
+            _destination,
+            _value,
+            _tokenMessage,
+            _hookMetadata,
+            _hook
+        );
+
+        emit SentTransferRemote(_destination, _recipient, _amountOrId);
+    }
+
+    /// @dev Hyperspeed Bridge: Edited to receive and store the current amount of funds in the Insurance Fund on the outbound chain.
+    function _handle(
+        uint32 _origin,
+        bytes32,
+        bytes calldata _message
+    ) internal virtual override {
+        bytes32 recipient = _message.recipient();
+        uint256 amount = _message.amount();
+        bytes calldata metadata = _message.metadata();
+        ethereumInsuranceFundAmount = _.message.insuranceFundAmount();
+        _transferTo(recipient.bytes32ToAddress(), amount, metadata);
+        emit ReceivedTransferRemote(_origin, recipient, amount);
+
+    }
 
     receive() external payable {
         emit Donation(msg.sender, msg.value);

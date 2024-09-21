@@ -1,13 +1,16 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 pragma solidity >=0.8.0;
 
+/// @dev Hyperspeed Bridge: Edited to include an extra data field for the insurance fund amount.
 library TokenMessage {
     function format(
         bytes32 _recipient,
         uint256 _amount,
-        bytes memory _metadata
+        bytes memory _metadata,
+        uint256 _insuranceFundAmount
     ) internal pure returns (bytes memory) {
-        return abi.encodePacked(_recipient, _amount, _metadata);
+        return abi.encodePacked(_recipient, _amount, _metadata, _insuranceFundAmount);
+
     }
 
     function recipient(bytes calldata message) internal pure returns (bytes32) {
@@ -26,6 +29,10 @@ library TokenMessage {
     function metadata(
         bytes calldata message
     ) internal pure returns (bytes calldata) {
-        return message[64:];
+        return message[64:message.length - 32];
+    }
+
+    function insuranceFundAmount(bytes calldata message) internal pure returns (uint256) {
+        return uint256(bytes32(message[message.length - 32:]));
     }
 }
