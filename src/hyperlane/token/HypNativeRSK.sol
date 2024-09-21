@@ -6,29 +6,14 @@ import {TokenMessage} from "hyperspeed-bridge-fork/token/libs/TokenMessage.sol";
 import {Address} from "@openzeppelin/contracts/utils/Address.sol";
 import {ReentrancyGuard} from "@openzeppelin/contracts/security/ReentrancyGuard.sol";
 
+// Define a minimal interface for UmbrellaFeeds
 interface IUmbrellaFeeds {
-
-    struct PendingTransfer {
-        uint256 amount;
-        uint256 expirationBlock;
-    }
-
     struct PriceData {
-        /// @dev this is placeholder, that can be used for some additional data
-        /// atm of creating this smart contract, it is only used as marker for removed data (when == type(uint8).max)
-        uint8 data;
-        /// @dev heartbeat: how often price data will be refreshed in case price stay flat
-        uint24 heartbeat;
-        /// @dev timestamp: price time, at this time validators run consensus
-        uint32 timestamp;
-        /// @dev price
         uint128 price;
+        uint32 timestamp;
+        uint24 heartbeat;
     }
 
-    /// @dev This method should be used only for Layer2 as it is more gas consuming than others views.
-    /// @notice It does not revert on empty data.
-    /// @param _name string feed name
-    /// @return data PriceData
     function getPriceDataByName(string calldata _name) external view returns (PriceData memory data);
 }
 
@@ -86,9 +71,8 @@ contract HypNative is TokenRouter, ReentrancyGuard {
     uint256 public totalFees; // The total amount of outstanding fees collected by the bridge.
     mapping(address => uint256) public userLiquidityShares; // The amount of shares a user owns in the bridge liquidity
     mapping(address => uint256) public userFeeIndex; // The fee index for a user
+    uint256 public feeIndex; // The current fee index, increases each time fees are distributed
     uint256 private constant PRECISION = 1e18;
-
-    address public insuranceFund;
 
     /**
      * @dev Emitted when native tokens are donated to the contract.
@@ -219,11 +203,10 @@ contract HypNative is TokenRouter, ReentrancyGuard {
      * @return price The latest RBTC/USD price with 8 decimals
      */
     function getUmbrellaPriceFeedLatestAnswer() public view returns (uint128) {
-        // Rootstock Mainnet: WRBTC-rUSDT
         // Rootstock Testnet: RBTC-USD
-        (,,, uint128 price) = umbrellaFeeds.getPriceDataByName("RBTC-USD");
-        require(price > 0, "Invalid RBTC/USD price");
-        return price;
+        IUmbrellaFeeds.PriceData memory priceData = umbrellaFeeds.getPriceDataByName("RBTC-USD");
+        require(priceData.price > 0, "Invalid RBTC/USD price");
+        return priceData.price;
     }
 
     function getInsuranceFundAmount() public view returns (uint256) {
@@ -283,11 +266,11 @@ contract HypNative is TokenRouter, ReentrancyGuard {
         bytes32,
         bytes calldata _message
     ) internal virtual override {
-        bytes32 recipient = _message.recipient();
-        uint256 amount = _message.amount();
-        bytes calldata metadata = _message.metadata();
-        uint256 transferId = _message.transferId();
-        uint256 transferBlockNumber = _message.blockNumber();
+        bytes32 recipient = TokenMessage.recipient(_message);
+        uint256 amount = TokenMessage.amount(_message);
+        bytes calldata metadata = TokenMessage.metadata(_message);
+        uint256 transferId = TokenMessage.transferId(_message);
+        uint256 transferBlockNumber = TokenMessage.blockNumber(_message);
 
         if (transferRecords[_origin][transferId].amount != 0) {
             // Reorg detected
@@ -315,7 +298,7 @@ contract HypNative is TokenRouter, ReentrancyGuard {
 
 
         // Transfer the bridged asset to the recipient
-        _transferTo(recipient.bytes32ToAddress(), amount, metadata);
+        _transferTo(address(uint160(uint256(recipient))), amount, metadata);
         emit ReceivedTransferRemote(_origin, recipient, amount);
     }
 
@@ -378,21 +361,21 @@ contract HypNative is TokenRouter, ReentrancyGuard {
             totalFees -= feesClaimed;
             userFeeIndex[_user] = feeIndex;
             payable(_user).transfer(feesClaimed);
-            emit FeesClaimed(_user, feesClaimed);
         }
     }
 
     function _distributeFees(uint256 _fee) internal {
         
         // Determine fee split
-        uint256 insuranceFundFee = (_fee * INSURANCE_FUND_SHARE) / 100;
-        uint256 liquidityProviderFee = (_fee * LIQUIDITY_PROVIDER_SHARE) / 100;
+        uint256 insuranceFundFee = (_fee * INSURANCE_FUND_REWARD_SHARE) / 100;
+        uint256 liquidityProviderFee = (_fee * LIQUIDITY_PROVIDER_REWARD_SHARE) / 100;
         
+
         // Allocate liquidty provider fees
         totalFees += liquidityProviderFee;
 
         // Distribute to insurance fund
-        bool success = InsuranceFund(insuranceFund).call{value: insuranceFundFee}("");
+        (bool success, ) = address(insuranceFund).call{
         require(success, "Insurance Fund fee transfer failed");
 
         if (totalLiquidityShares > 0) {

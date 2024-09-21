@@ -258,11 +258,11 @@ contract HypNative is TokenRouter, ReentrancyGuard {
         bytes32,
         bytes calldata _message
     ) internal virtual override {
-        bytes32 recipient = _message.recipient();
-        uint256 amount = _message.amount();
-        bytes calldata metadata = _message.metadata();
-        uint256 transferId = _message.transferId();
-        uint256 transferBlockNumber = _message.blockNumber();
+        bytes32 recipient = TokenMessage.recipient(_message);
+        uint256 amount = TokenMessage.amount(_message);
+        bytes calldata metadata = TokenMessage.metadata(_message);
+        uint256 transferId = TokenMessage.transferId(_message);
+        uint256 transferBlockNumber = TokenMessage.blockNumber(_message);
 
         if (transferRecords[_origin][transferId].amount != 0) {
             // Reorg detected
@@ -289,7 +289,7 @@ contract HypNative is TokenRouter, ReentrancyGuard {
         rootstockAvailableLiquidity = _message.availableLiquidity();
 
         // Transfer the bridged asset to the recipient
-        _transferTo(recipient.bytes32ToAddress(), amount, metadata);
+        _transferTo(address(uint160(uint256(recipient))), amount, metadata);
         emit ReceivedTransferRemote(_origin, recipient, amount);
     }
 
@@ -366,7 +366,7 @@ contract HypNative is TokenRouter, ReentrancyGuard {
         totalFees += liquidityProviderFee;
 
         // Distribute to insurance fund
-        bool success = InsuranceFund(insuranceFund).call{value: insuranceFundFee}("");
+        (bool success, ) = address(insuranceFund).call{
         require(success, "Insurance Fund fee transfer failed");
 
         if (totalLiquidityShares > 0) {
