@@ -5,9 +5,17 @@ import {TokenRouter} from "./libs/TokenRouter.sol";
 import {TokenMessage} from "./libs/TokenMessage.sol";
 import {Address} from "@openzeppelin/contracts/utils/Address.sol";
 
-// TODO: Integrate Umbrella Price Feeds to ensure user claims an equivalent amount of native tokens on the destination chain.
+interface IUmbrellaFeeds {
+    /// @notice method will revert if data for `_key` not exists.
+    /// @param _key hash of feed name
+    /// @return price
+    function getPrice(bytes32 _key) external view returns (uint128 price);
+}
+
+// TODO: Determine the UmbrellaFeeds key for WRBTC-rUSDT & RBTC-USD (Fix getUmbrellaPriceFeedLatestAnswer)
 // TODO: Track the amount of funds that can be currently bridged, given the amount in the Insuarance Fund and the amount awaiting finality.
 // TODO: Take bridging fees to fund the Insurance Fund & reward users who provide liquidity for bridging.
+
 
 /**
  * @title Hyperlane Native Token Router that extends ERC20 with remote transfer functionality.
@@ -19,6 +27,7 @@ import {Address} from "@openzeppelin/contracts/utils/Address.sol";
  * - Depositing of liquidity which is utilized by the contract for handling withdrawals and earns bridging fees.
  */
 contract HypNative is TokenRouter {
+    IUmbrellaFeeds public umbrellaFeeds;
 
     /**
      * @dev Emitted when native tokens are donated to the contract.
@@ -27,7 +36,11 @@ contract HypNative is TokenRouter {
      */
     event Donation(address indexed sender, uint256 amount);
 
-    constructor(address _mailbox) TokenRouter(_mailbox) {}
+    constructor(address _mailbox) TokenRouter(_mailbox) {
+        // Rootstock Mainnet UmbrellaFeeds: 0xDa9A63D77406faa09d265413F4E128B54b5057e0
+        // Rootstock Testnet UmbrellaFeeds: 0x3F2254bc49d2d6e8422D71cB5384fB76005558A9
+        umbrellaFeeds = IUmbrellaFeeds(0x3F2254bc49d2d6e8422D71cB5384fB76005558A9);
+    }
 
     /**
      * @notice Initializes the Hyperlane router
@@ -54,7 +67,15 @@ contract HypNative is TokenRouter {
     ) external payable virtual override returns (bytes32 messageId) {
         require(msg.value >= _amount, "Native: amount exceeds msg.value");
         uint256 _hookPayment = msg.value - _amount;
-        return _transferRemote(_destination, _recipient, _amount, _hookPayment);
+
+        // Get the latest RBTC/USD price from Umbrella Network
+        uint128 rbtcUsdPrice = getUmbrellaPriceFeedLatestAnswer();
+        require(rbtcUsdPrice > 0, "Invalid RBTC/USD price");
+        
+        // Calculate the USD value of the RBTC being bridged
+        uint256 _usdValue = (_amount * uint256(rbtcUsdPrice)) / 1e18;
+
+        return _transferRemote(_destination, _recipient, _usdValue, _hookPayment);
     }
 
     function balanceOf(
@@ -77,15 +98,33 @@ contract HypNative is TokenRouter {
     /**
      * @dev Sends `_amount` of native token to `_recipient` balance.
      * @inheritdoc TokenRouter
+     * @dev Hyperspeed Bridge: Edited to receive the USD value of the incoming ETH and convert it into RBTC.
      */
     function _transferTo(
         address _recipient,
         uint256 _amount,
         bytes calldata // no metadata
     ) internal virtual override {
-        Address.sendValue(payable(_recipient), _amount);
 
+        // Get the latest RBTC/USD price from Umbrella Network
+        uint128 rbtcUsdPrice = getUmbrellaPriceFeedLatestAnswer();
+        require(answer > 0, "Invalid RBTC/USD price");
+
+        // Calculate the amount that was received in BTC
+        uint256 _rbtcValue = (_amount * uint256(rbtcUsdPrice)) / 1e18;
         
+        Address.sendValue(payable(_recipient), _rbtcValue);
+    }
+
+    /**
+     * @dev Gets the latest RBTC/USD price from UmbrellaFeeds
+     * @return price The latest RBTC/USD price with 8 decimals
+     */
+    function getUmbrellaPriceFeedLatestAnswer() public view returns (uint128) {
+        // Rootstock Mainnet WRBTC-rUSDT key: 0x0000000000000000000000000000000000000000000000000000000000000000
+        // Rootstock Testnet RBTC-USD key: 0x0000000000000000000000000000000000000000000000000000000000000000
+        uint128 answer = umbrellaFeeds.getPrice(0x0000000000000000000000000000000000000000000000000000000000000000);
+        return answer;
     }
 
     receive() external payable {

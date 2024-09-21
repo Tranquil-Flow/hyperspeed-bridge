@@ -6,7 +6,6 @@ import {TokenMessage} from "./libs/TokenMessage.sol";
 import {Address} from "@openzeppelin/contracts/utils/Address.sol";
 import {AggregatorV3Interface} from "@chainlink/contracts/src/v0.8/shared/interfaces/AggregatorV3Interface.sol";
 
-// TODO: Integrate Chainlink Price Feeds to ensure user claims an equivalent amount of native tokens on the destination chain.
 // TODO: Track the amount of funds that can be currently bridged, given the amount in the Insuarance Fund and the amount awaiting finality.
 // TODO: Take bridging fees to fund the Insurance Fund & reward users who provide liquidity for bridging.
 
@@ -35,8 +34,8 @@ contract HypNative is TokenRouter {
      * @param _dataFeed The address of the Chainlink data feed for the depositing asset.
      */
     constructor(address _mailbox) TokenRouter(_mailbox) {
-        // Ethereum Mainnet: 0x5f4eC3Df9cbd43714FE2740f5E3616155c5b8419
-        // Ethereum Sepolia: 0x694AA1769357215DE4FAC081bf1f309aDC325306
+        // Ethereum Mainnet Chainlink Data Feed: 0x5f4eC3Df9cbd43714FE2740f5E3616155c5b8419
+        // Ethereum Sepolia Chainlink Data Feed: 0x694AA1769357215DE4FAC081bf1f309aDC325306
         dataFeed = AggregatorV3Interface(0x694AA1769357215DE4FAC081bf1f309aDC325306);
     }
 
