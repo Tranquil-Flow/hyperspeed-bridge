@@ -4,6 +4,7 @@ pragma solidity >=0.8.0;
 import {TokenRouter} from "./libs/TokenRouter.sol";
 import {TokenMessage} from "./libs/TokenMessage.sol";
 import {Address} from "@openzeppelin/contracts/utils/Address.sol";
+import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import {AggregatorV3Interface} from "@chainlink/contracts/src/v0.8/shared/interfaces/AggregatorV3Interface.sol";
 
 // TODO: Send and store the amount of funds that are available in liquidity on the bridge so users know if they can withdraw on other side.
@@ -17,7 +18,7 @@ import {AggregatorV3Interface} from "@chainlink/contracts/src/v0.8/shared/interf
  * - Instant transfer of bridged assets, ignoring finality as long as the currently bridging amount does not exceed the insurance fund.
  * - Depositing of liquidity which is utilized by the contract for handling withdrawals and earns bridging fees.
  */
-contract HypNative is TokenRouter {
+contract HypNative is TokenRouter, ReentrancyGuard {
     AggregatorV3Interface internal dataFeed;
 
     uint256 public rootstockInsuranceFundAmount; // Stores the amount of USD value in the Insurance Fund on Rootstock
@@ -145,7 +146,7 @@ contract HypNative is TokenRouter {
         address _recipient,
         uint256 _amount,
         bytes calldata // no metadata
-    ) internal virtual override {
+    ) internal virtual override nonReentrant {
 
         // Get the latest ETH/USD price from Chainlink
         int256 ethUsdPrice = getChainlinkDataFeedLatestAnswer();
@@ -255,7 +256,7 @@ contract HypNative is TokenRouter {
             emit LiquidityDeposited(msg.sender, msg.value, newShares);
         }
 
-        function withdrawBridgeLiquidity(uint256 _shares) external {
+        function withdrawBridgeLiquidity(uint256 _shares) external nonReentrant {
             require(_shares > 0 && _shares <= userLiquidityShares[msg.sender], "Invalid share amount");
 
             _claimFees(msg.sender);
@@ -276,7 +277,7 @@ contract HypNative is TokenRouter {
             _claimFees(msg.sender);
         }
 
-        function _claimFees(address _user) internal {
+        function _claimFees(address _user) internal nonReentrant {
             uint256 feesClaimed = pendingFees(_user);
             if (feesClaimed > 0) {
                 totalFees -= feesClaimed;

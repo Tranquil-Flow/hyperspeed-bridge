@@ -4,6 +4,7 @@ pragma solidity >=0.8.0;
 import {TokenRouter} from "./libs/TokenRouter.sol";
 import {TokenMessage} from "./libs/TokenMessage.sol";
 import {Address} from "@openzeppelin/contracts/utils/Address.sol";
+import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 
 interface IUmbrellaFeeds {
     struct PriceData {
@@ -36,7 +37,7 @@ interface IUmbrellaFeeds {
  * - Instant transfer of bridged assets, ignoring finality as long as the currently bridging amount does not exceed the insurance fund.
  * - Depositing of liquidity which is utilized by the contract for handling withdrawals and earns bridging fees.
  */
-contract HypNative is TokenRouter {
+contract HypNative is TokenRouter, ReentrancyGuard {
     IUmbrellaFeeds public umbrellaFeeds;
 
     uint256 public ethereumInsuranceFundAmount; // Stores the amount of USD value in the Insurance Fund on Ethereum
@@ -160,7 +161,7 @@ contract HypNative is TokenRouter {
         address _recipient,
         uint256 _amount,
         bytes calldata // no metadata
-    ) internal virtual override {
+    ) internal virtual override nonReentrant {
 
         // Get the latest RBTC/USD price from Umbrella Network
         uint128 rbtcUsdPrice = getUmbrellaPriceFeedLatestAnswer();
@@ -271,7 +272,7 @@ contract HypNative is TokenRouter {
             emit LiquidityDeposited(msg.sender, msg.value, newShares);
         }
 
-    function withdrawBridgeLiquidity(uint256 _shares) external {
+    function withdrawBridgeLiquidity(uint256 _shares) external nonReentrant {
         require(_shares > 0 && _shares <= userLiquidityShares[msg.sender], "Invalid share amount");
 
         _claimFees(msg.sender);
@@ -292,7 +293,7 @@ contract HypNative is TokenRouter {
         _claimFees(msg.sender);
     }
 
-    function _claimFees(address _user) internal {
+    function _claimFees(address _user) internal nonReentrant {
         uint256 feesClaimed = pendingFees(_user);
         if (feesClaimed > 0) {
             totalFees -= feesClaimed;
