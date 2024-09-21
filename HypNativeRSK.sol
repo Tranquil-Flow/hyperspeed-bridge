@@ -30,6 +30,11 @@ contract HypNative is TokenRouter {
     IUmbrellaFeeds public umbrellaFeeds;
 
     uint256 public ethereumInsuranceFundAmount; // Stores the amount of USD value in the Insurance Fund on Ethereum
+    uint256 public pendingBridgeAmount; // The amount of USD value that is currently being bridged and has not reached finality.
+    uint256 public constant FINALITY_PERIOD = 12; // The number of blocks required for finality on Rootstock.
+
+    mapping(uint256 => PendingTransfer) public pendingTransfers; // Maps transfer IDs to their corresponding struct
+    uint256 public nextTransferId; // The next transfer ID to be used
 
     /**
      * @dev Emitted when native tokens are donated to the contract.
@@ -61,6 +66,8 @@ contract HypNative is TokenRouter {
     /**
      * @inheritdoc TokenRouter
      * @dev uses (`msg.value` - `_amount`) as hook payment and `msg.sender` as refund address.
+     * @dev Hyperspeed Bridge: Edited to calculate USD value of RBTC being bridged and sends this value cross chain.
+     * @dev Hyperspeed Bridge: Edited to check if the amount being bridged is within the safe bridgeable amount.
      */
     function transferRemote(
         uint32 _destination,
@@ -75,6 +82,21 @@ contract HypNative is TokenRouter {
         
         // Calculate the USD value of the RBTC being bridged
         uint256 _usdValue = (_amount * uint256(rbtcUsdPrice)) / 1e18;
+
+        // Hyperspeed Bridge: Checks if any transfers have reached finality and updates the pending bridge amount accordingly.
+        _processFinalizedTransfers();
+
+        // Checks the safe amount that can be currently bridged given the Insurance Fund and the pending bridged amount awaiting finality.
+        uint256 safeBridgeableAmount = getInsuranceFundAmount() - pendingBridgeAmount;
+        require(_usdValue <= safeBridgeableAmount, "Exceeds safe bridgeable amount");
+
+        // Updates the pending bridge amount and stores the transfer details.
+        pendingBridgeAmount += _usdValue;
+        pendingTransfers[nextTransferId] = PendingTransfer({
+            amount: _usdValue,
+            expirationBlock: block.number + FINALITY_PERIOD
+        });
+        nextTransferId++;
 
         return _transferRemote(_destination, _recipient, _usdValue, _hookPayment);
     }
@@ -183,6 +205,15 @@ contract HypNative is TokenRouter {
         _transferTo(recipient.bytes32ToAddress(), amount, metadata);
         emit ReceivedTransferRemote(_origin, recipient, amount);
 
+    }
+
+    function _processFinalizedTransfers() internal {
+        uint256 i = nextTransferId - pendingTransfers.length;
+        while (i < nextTransferId && pendingTransfers[i].expirationBlock <= block.number) {
+            pendingBridgeAmount -= pendingTransfers[i].amount;
+            delete pendingTransfers[i];
+            i++;
+        }
     }
 
     receive() external payable {
