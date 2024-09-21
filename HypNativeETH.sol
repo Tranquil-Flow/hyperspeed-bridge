@@ -68,7 +68,6 @@ contract HypNative is TokenRouter {
 
         // Get the latest ETH/USD price from Chainlink
         int256 ethUsdPrice = getChainlinkDataFeedLatestAnswer();
-        require(ethUsdPrice > 0, "Invalid ETH/USD price");
         
         // Calculate the USD value of the ETH being bridged
         uint256 _usdValue = (_amount * uint256(ethUsdPrice)) / 1e18;
@@ -107,7 +106,6 @@ contract HypNative is TokenRouter {
 
         // Get the latest ETH/USD price from Chainlink
         int256 ethUsdPrice = getChainlinkDataFeedLatestAnswer();
-        require(ethUsdPrice > 0, "Invalid ETH/USD price");
 
         // Calculate the amount that was received in ETH
         uint256 _ethValue = (_amount * uint256(ethUsdPrice)) / 1e18;
@@ -123,8 +121,10 @@ contract HypNative is TokenRouter {
             /*uint timeStamp*/,
             /*uint80 answeredInRound*/
         ) = dataFeed.latestRoundData();
+        require(answer > 0, "Invalid ETH/USD price");
         return answer;
     }
+
 
     receive() external payable {
         emit Donation(msg.sender, msg.value);

@@ -70,7 +70,6 @@ contract HypNative is TokenRouter {
 
         // Get the latest RBTC/USD price from Umbrella Network
         uint128 rbtcUsdPrice = getUmbrellaPriceFeedLatestAnswer();
-        require(rbtcUsdPrice > 0, "Invalid RBTC/USD price");
         
         // Calculate the USD value of the RBTC being bridged
         uint256 _usdValue = (_amount * uint256(rbtcUsdPrice)) / 1e18;
@@ -108,7 +107,6 @@ contract HypNative is TokenRouter {
 
         // Get the latest RBTC/USD price from Umbrella Network
         uint128 rbtcUsdPrice = getUmbrellaPriceFeedLatestAnswer();
-        require(answer > 0, "Invalid RBTC/USD price");
 
         // Calculate the amount that was received in BTC
         uint256 _rbtcValue = (_amount * uint256(rbtcUsdPrice)) / 1e18;
@@ -124,8 +122,10 @@ contract HypNative is TokenRouter {
         // Rootstock Mainnet WRBTC-rUSDT key: 0x0000000000000000000000000000000000000000000000000000000000000000
         // Rootstock Testnet RBTC-USD key: 0x0000000000000000000000000000000000000000000000000000000000000000
         uint128 answer = umbrellaFeeds.getPrice(0x0000000000000000000000000000000000000000000000000000000000000000);
+        require(answer > 0, "Invalid RBTC/USD price");
         return answer;
     }
+
 
     receive() external payable {
         emit Donation(msg.sender, msg.value);
