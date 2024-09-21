@@ -69,9 +69,11 @@ contract InsuranceFund is ReentrancyGuard {
         emit Withdrawn(msg.sender, amount, shares);
     }
 
+    // TODO: Add bool return value for checking success of call on HypNative contract
     function liquidateForReorg(uint256 amount) external {
         require(hypNativeContractSet, "HypNative contract not set");
         require(msg.sender == hypNativeContract, "Only HypNative contract can liquidate");
+
         require(amount <= address(this).balance, "Insufficient funds in the insurance pool");
 
         // Withdraw funds from yield-generating strategy if necessary
