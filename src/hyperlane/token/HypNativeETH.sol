@@ -17,7 +17,7 @@ import {AggregatorV3Interface} from "chainlink/contracts/src/v0.8/shared/interfa
  * - Depositing of liquidity which is utilized by the contract for handling withdrawals and earns bridging fees.
  */
 
-contract HypNative is TokenRouter, ReentrancyGuard {
+//contract HypNative is TokenRouter, ReentrancyGuard {
 
     // struct PendingTransfer {
     //     uint256 amount;
@@ -328,4 +328,4 @@ contract HypNative is TokenRouter, ReentrancyGuard {
     // receive() external payable {
     //     emit Donation(msg.sender, msg.value);
     // }
-}
+//}
