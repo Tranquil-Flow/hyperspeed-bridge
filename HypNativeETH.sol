@@ -7,8 +7,6 @@ import {Address} from "@openzeppelin/contracts/utils/Address.sol";
 import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import {AggregatorV3Interface} from "@chainlink/contracts/src/v0.8/shared/interfaces/AggregatorV3Interface.sol";
 
-// TODO: Send and store the amount of funds that are available in liquidity on the bridge so users know if they can withdraw on other side.
-
 /**
  * @title Hyperlane Native Token Router that extends ERC20 with remote transfer functionality.
  * @author Abacus Works
@@ -22,6 +20,7 @@ contract HypNative is TokenRouter, ReentrancyGuard {
     AggregatorV3Interface internal dataFeed;
 
     uint256 public rootstockInsuranceFundAmount; // Stores the amount of USD value in the Insurance Fund on Rootstock
+    uint256 public rootstockAvailableLiquidity; // Stores the amount of USD value in the available liquidity on Rootstock
     uint256 public pendingBridgeAmount; // The amount of USD value that is currently being bridged and has not reached finality.
     uint256 public constant FINALITY_PERIOD = 12; // The number of blocks required for finality on Ethereum.
 
@@ -100,6 +99,7 @@ contract HypNative is TokenRouter, ReentrancyGuard {
         
         // Calculate the USD value of the ETH being bridged
         uint256 _usdValue = (amountAfterFee * uint256(ethUsdPrice)) / 1e18;
+        require(_usdValue <= rootstockAvailableLiquidity, "Insufficient liquidity on the destination chain");
 
         // Hyperspeed Bridge: Checks if any transfers have reached finality and updates the pending bridge amount accordingly.
         _processFinalizedTransfers();
@@ -188,6 +188,7 @@ contract HypNative is TokenRouter, ReentrancyGuard {
 
 
     /// @dev Hyperspeed Bridge: Edited to send the current amount of funds in the Insurance Fund in the message.
+    /// @dev Hyperspeed Bridge: Edited to send the current amount of available liquidity in the message.
     function _transferRemote(
         uint32 _destination,
         bytes32 _recipient,
@@ -195,14 +196,18 @@ contract HypNative is TokenRouter, ReentrancyGuard {
         uint256 _value,
         bytes memory _hookMetadata,
         address _hook
-    ) internal virtual override returns (bytes32 messageId) {
+    ) internal virtual override returns (bytes32 messageId) { 
+        int256 ethUsdPrice = getChainlinkDataFeedLatestAnswer();
+        uint256 _availableLiquidity = (totalLiquidity() * uint256(ethUsdPrice)) / 1e18;
         uint256 _insuranceFundAmount = getInsuranceFundAmount();
+
         bytes memory _tokenMetadata = _transferFromSender(_amountOrId);
         bytes memory _tokenMessage = TokenMessage.format(
             _recipient,
             _amountOrId,
             _tokenMetadata,
-            _insuranceFundAmount
+            _insuranceFundAmount,
+            _availableLiquidity
         );
 
         messageId = _Router_dispatch(
@@ -226,6 +231,7 @@ contract HypNative is TokenRouter, ReentrancyGuard {
         uint256 amount = _message.amount();
         bytes calldata metadata = _message.metadata();
         rootstockInsuranceFundAmount = _.message.insuranceFundAmount();
+        rootstockAvailableLiquidity = _.message.availableLiquidity();
         _transferTo(recipient.bytes32ToAddress(), amount, metadata);
         emit ReceivedTransferRemote(_origin, recipient, amount);
     }

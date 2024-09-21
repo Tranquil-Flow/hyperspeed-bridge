@@ -26,8 +26,6 @@ interface IUmbrellaFeeds {
     function getPriceDataByName(string calldata _name) external view returns (PriceData memory data);
 }
 
-// TODO: Send and store the amount of funds that are available in liquidity on the bridge so users know if they can withdraw on other side.
-
 /**
  * @title Hyperlane Native Token Router that extends ERC20 with remote transfer functionality.
  * @author Abacus Works
@@ -41,6 +39,7 @@ contract HypNative is TokenRouter, ReentrancyGuard {
     IUmbrellaFeeds public umbrellaFeeds;
 
     uint256 public ethereumInsuranceFundAmount; // Stores the amount of USD value in the Insurance Fund on Ethereum
+    uint256 public ethereumAvailableLiquidity; // Stores the amount of USD value in the available liquidity on Ethereum
     uint256 public pendingBridgeAmount; // The amount of USD value that is currently being bridged and has not reached finality.
     uint256 public constant FINALITY_PERIOD = 12; // The number of blocks required for finality on Rootstock.
 
@@ -115,6 +114,7 @@ contract HypNative is TokenRouter, ReentrancyGuard {
         
         // Calculate the USD value of the RBTC being bridged
         uint256 _usdValue = (amountAfterFee * uint256(rbtcUsdPrice)) / 1e18;
+        require(_usdValue <= ethereumAvailableLiquidity, "Insufficient liquidity on the destination chain");
 
         // Hyperspeed Bridge: Checks if any transfers have reached finality and updates the pending bridge amount accordingly.
         _processFinalizedTransfers();
@@ -203,6 +203,7 @@ contract HypNative is TokenRouter, ReentrancyGuard {
 
 
     /// @dev Hyperspeed Bridge: Edited to send the current amount of funds in the Insurance Fund in the message.
+    /// @dev Hyperspeed Bridge: Edited to send the current amount of available liquidity in the message.
     function _transferRemote(
         uint32 _destination,
         bytes32 _recipient,
@@ -211,13 +212,17 @@ contract HypNative is TokenRouter, ReentrancyGuard {
         bytes memory _hookMetadata,
         address _hook
     ) internal virtual override returns (bytes32 messageId) {
+        uint128 rbtcUsdPrice = getUmbrellaPriceFeedLatestAnswer();
+        uint256 _availableLiquidity = totalLiquidity() * rbtcUsdPrice / 1e18;
         uint256 _insuranceFundAmount = getInsuranceFundAmount();
+
         bytes memory _tokenMetadata = _transferFromSender(_amountOrId);
         bytes memory _tokenMessage = TokenMessage.format(
             _recipient,
             _amountOrId,
             _tokenMetadata,
-            _insuranceFundAmount
+            _insuranceFundAmount,
+            _availableLiquidity
         );
 
         messageId = _Router_dispatch(
@@ -241,6 +246,7 @@ contract HypNative is TokenRouter, ReentrancyGuard {
         uint256 amount = _message.amount();
         bytes calldata metadata = _message.metadata();
         ethereumInsuranceFundAmount = _.message.insuranceFundAmount();
+        ethereumAvailableLiquidity = _.message.availableLiquidity();
         _transferTo(recipient.bytes32ToAddress(), amount, metadata);
         emit ReceivedTransferRemote(_origin, recipient, amount);
 
